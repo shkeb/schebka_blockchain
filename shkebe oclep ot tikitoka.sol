@@ -1,69 +1,95 @@
-// SPDX-License-Identifier: GPL-3.0
-
 pragma solidity >=0.8.2 <0.9.0;
 
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol"; 
 
-contract Library{
-    constructor(){
+contract ShkebTok is ERC1155{
+
+    constructor() ERC1155(""){
         libAdmin=msg.sender;
     }
 
-    uint amountBooks = 0;
+    uint amountAccounts = 1;
     address libAdmin;
-    uint public priceForMonth = 1000 gwei;
+    uint public priceForWeek = 10000 wei;
+    uint balance;
 
-    struct Book {
-        string name;
-        string picture;
-        bool availability;
-    }
-
-    mapping (uint => Book) bookNumber;
+    mapping (uint => string) accountNumber;
+    mapping (uint => uint) public accountBalance;
     mapping (uint => address) rentedTo;
+    mapping  (address => uint) public whereIsAccountSt;
 
-    //------------Admin
-
-    function changeAdmin(address _newAdmin) public {
-        require(libAdmin==msg.sender, "Only admin");
-        libAdmin = _newAdmin;
-    }
-    function withdraw() public { 
-        require(libAdmin==msg.sender, "Only admin"); 
-        payable(libAdmin).transfer(address(this).balance); 
-    }
-
-    //------------Book
-
-    function createBook(string calldata _name, string calldata _image) public returns(uint){
+    function createAccount(string calldata _url) public payable  {
         require(libAdmin==msg.sender, "Only admin");
         //book creation
-        bookNumber[amountBooks] = Book(_name, _image, true);
-        amountBooks++;
-        return amountBooks--;
-
+        accountNumber[amountAccounts] =_url;
+        //Cоздание токена
+        _mint(libAdmin, amountAccounts, 1, "");
+        //Пополнение баланса
+    
+        amountAccounts++;
     }
 
-    function bookInfo(uint _bookID) public view returns ( Book memory){
-        require(_bookID<amountBooks, "Not exist");
-        return bookNumber[_bookID];
-    }
-    function rentBook(uint _bookID, uint _month) public payable{
-        require(_bookID<amountBooks, "Not exist");
-        require(priceForMonth*_month==msg.value, "Not enough founds");
-        //require(rentedTo[_bookID]==0x0000000000000000000000000000000000000000, "Already rented");
-        require(bookNumber[_bookID].availability, "Already rented");
-        rentedTo[_bookID] = msg.sender;
-        bookNumber[_bookID].availability = false;
-    }
-    function whereIsBook(uint _bookID) public view returns(address){
-        require(_bookID<amountBooks, "Not exist");
-        return  rentedTo[_bookID];
+    function getAmount() public view returns(uint) {
+        return amountAccounts - 1;
     }
 
-    function returnBook(uint _bookID)public{
-        require(msg.sender==libAdmin || msg.sender == rentedTo[_bookID], "Only admin ");
-        bookNumber[_bookID].availability = true;
-        delete rentedTo[_bookID];
+    function url(uint _accountId) public view returns(string memory) {
+        return "https://github.com/shkeb/schebka_blockchain/blob/main/ShkebCoin.json";
+    }
+
+    //Аренда
+    function rentBook(uint _accountId, uint _week) public payable {
+        uint amount = priceForWeek * _week;
+        require(whereIsAccountSt[msg.sender] == 0, "You have an account");
+        require(_accountId < amountAccounts, "Not exist");
+        require(amount== msg.value, "Not enough funds");
+        require(balanceOf(libAdmin, _accountId) != 0, "Already rented");
+        rentedTo[_accountId] = msg.sender;
+        //Согласие админа на управление токенами
+        _setApprovalForAll(libAdmin, msg.sender, true);
+        //Передача токена
+        safeTransferFrom(libAdmin, msg.sender, _accountId, 1, "");
+        //Запрет админа на управление токенами
+        _setApprovalForAll(libAdmin, msg.sender, false);
+        uint adminProcent = amount * 90/100;
+        uint other  = amount - adminProcent;
+        accountBalance[_accountId] += other;
+        whereIsAccountSt[msg.sender] = _accountId;
+        payable(libAdmin).transfer(adminProcent); 
+    }
+
+    //Admin
+    function withdraw(uint _accountId) public { 
+        require(accountBalance[_accountId] > 1020); 
+        uint different = accountBalance[_accountId] - 1020;
+        payable(msg.sender).transfer(different); 
+        accountBalance[_accountId] -= different;
+    }
+
+    function whereIsAccount(uint _accountId) public view returns(address) {
+        require(_accountId < amountAccounts || _accountId == 0, "Not exist");
+        return rentedTo[_accountId];
+    }
+
+    function whichAccount() public view returns(uint) {
+        return whereIsAccountSt[msg.sender];
+    }
+
+    function viewVideo(uint _accountId) public {
+       require(msg.sender == whereIsAccount(_accountId), "Its not your account");
+       accountBalance[_accountId] += 1 wei;
+    }
+
+    function upoadVideo(uint _accountId) public {
+        require(accountBalance[_accountId] > 100 wei);
+        require(msg.sender == whereIsAccount(_accountId), "Its not your account");
+        accountBalance[_accountId] -= 100 wei;
+    }
+
+    function returnAccount(uint _accountId) public{
+        require(msg.sender == rentedTo[_accountId], "Only admin");
+        safeTransferFrom(msg.sender, libAdmin, _accountId, 1, "");
+        delete rentedTo[_accountId];
     }
 
 
